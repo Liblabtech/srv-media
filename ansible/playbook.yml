@@ -1,0 +1,378 @@
+---
+# =============================================================================
+# srv-media — Playbook Ansible : Préparation de la machine
+# =============================================================================
+# Usage:
+#   ansible-playbook -i ansible/inventory.yml ansible/playbook.yml
+#   ansible-playbook -i ansible/inventory.yml ansible/playbook.yml --tags "system"
+#   ansible-playbook -i ansible/inventory.yml ansible/playbook.yml --tags "mounts"
+#
+# Tags disponibles :
+#   system   — Update/upgrade, timezone, paquets, utilisateur
+#   docker   — Installation Docker CE + Compose
+#   mounts   — Montages SMB/NFS/iSCSI + fstab
+#   dirs     — Création des dossiers data/config + permissions
+#   network  — Réseau Docker media-network
+#   all      — Tout (par défaut)
+# =============================================================================
+
+- name: "srv-media — Préparation du serveur"
+  hosts: all
+  become: true
+  vars_files:
+    - vars.yml
+
+  tasks:
+    # =========================================================================
+    # SYSTEM — Mise à jour, timezone, paquets de base
+    # =========================================================================
+
+    - name: "[system] Mise à jour du cache APT"
+      tags: [system]
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: "[system] Upgrade de tous les paquets"
+      tags: [system]
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+        autoclean: true
+
+    - name: "[system] Installation des paquets requis"
+      tags: [system]
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - software-properties-common
+          - jq
+          - git
+          - sudo
+          - cifs-utils
+          - nfs-common
+          - open-iscsi
+          - parted
+          - "{{ extra_packages | default([]) }}"
+        state: present
+        flat: false
+      ignore_errors: true
+
+    - name: "[system] Installation des paquets supplémentaires"
+      tags: [system]
+      ansible.builtin.apt:
+        name: "{{ extra_packages | default([]) }}"
+        state: present
+      when: extra_packages is defined and extra_packages | length > 0
+
+    - name: "[system] Configuration du timezone"
+      tags: [system]
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: "[system] Configuration des locales"
+      tags: [system]
+      ansible.builtin.locale_gen:
+        name: fr_FR.UTF-8
+        state: present
+
+    # =========================================================================
+    # USER — Création de l'utilisateur media
+    # =========================================================================
+
+    - name: "[system] Création du groupe {{ media_group }}"
+      tags: [system]
+      ansible.builtin.group:
+        name: "{{ media_group }}"
+        gid: "{{ media_gid }}"
+        state: present
+
+    - name: "[system] Création de l'utilisateur {{ media_user }}"
+      tags: [system]
+      ansible.builtin.user:
+        name: "{{ media_user }}"
+        uid: "{{ media_uid }}"
+        group: "{{ media_group }}"
+        shell: /bin/bash
+        create_home: true
+        state: present
+
+    # =========================================================================
+    # DOCKER — Installation Docker CE + Compose plugin
+    # =========================================================================
+
+    - name: "[docker] Vérifier si Docker est installé"
+      tags: [docker]
+      ansible.builtin.command: docker --version
+      register: docker_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: "[docker] Ajouter la clé GPG Docker"
+      tags: [docker]
+      ansible.builtin.shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg \
+          | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+      when: docker_check.rc != 0
+
+    - name: "[docker] Ajouter le repo Docker"
+      tags: [docker]
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ ansible_architecture | regex_replace('x86_64', 'amd64') | regex_replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+      when: docker_check.rc != 0
+
+    - name: "[docker] Installer Docker CE"
+      tags: [docker]
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+      when: docker_check.rc != 0
+
+    - name: "[docker] Activer et démarrer Docker"
+      tags: [docker]
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: "[docker] Ajouter {{ media_user }} au groupe docker"
+      tags: [docker]
+      ansible.builtin.user:
+        name: "{{ media_user }}"
+        groups: docker
+        append: true
+
+    - name: "[docker] Ajouter l'utilisateur courant au groupe docker"
+      tags: [docker]
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+      when: ansible_user != media_user
+
+    # =========================================================================
+    # MOUNTS — Montages SMB/CIFS
+    # =========================================================================
+
+    - name: "[mounts] Créer les points de montage SMB"
+      tags: [mounts]
+      ansible.builtin.file:
+        path: "{{ item.mount_point }}"
+        state: directory
+        owner: "{{ media_uid }}"
+        group: "{{ media_gid }}"
+        mode: "0775"
+      loop: "{{ smb_mounts | default([]) }}"
+      when: smb_mounts is defined and smb_mounts | length > 0
+
+    - name: "[mounts] Monter les partages SMB/CIFS"
+      tags: [mounts]
+      ansible.posix.mount:
+        path: "{{ item.mount_point }}"
+        src: "{{ item.source }}"
+        fstype: "{{ item.fs_type | default('cifs') }}"
+        opts: "{{ item.options }}"
+        state: mounted
+      loop: "{{ smb_mounts | default([]) }}"
+      when: smb_mounts is defined and smb_mounts | length > 0
+
+    # =========================================================================
+    # MOUNTS — Montages NFS
+    # =========================================================================
+
+    - name: "[mounts] Créer les points de montage NFS"
+      tags: [mounts]
+      ansible.builtin.file:
+        path: "{{ item.mount_point }}"
+        state: directory
+        owner: "{{ media_uid }}"
+        group: "{{ media_gid }}"
+        mode: "0775"
+      loop: "{{ nfs_mounts | default([]) }}"
+      when: nfs_mounts is defined and nfs_mounts | length > 0
+
+    - name: "[mounts] Monter les partages NFS"
+      tags: [mounts]
+      ansible.posix.mount:
+        path: "{{ item.mount_point }}"
+        src: "{{ item.source }}"
+        fstype: "{{ item.fs_type | default('nfs') }}"
+        opts: "{{ item.options }}"
+        state: mounted
+      loop: "{{ nfs_mounts | default([]) }}"
+      when: nfs_mounts is defined and nfs_mounts | length > 0
+
+    # =========================================================================
+    # MOUNTS — iSCSI
+    # =========================================================================
+
+    - name: "[mounts] Activer et démarrer iscsid"
+      tags: [mounts]
+      ansible.builtin.systemd:
+        name: iscsid
+        enabled: true
+        state: started
+      when: iscsi_targets is defined and iscsi_targets | length > 0
+
+    - name: "[mounts] Découvrir les cibles iSCSI"
+      tags: [mounts]
+      ansible.builtin.command: >
+        iscsiadm -m discovery -t sendtargets -p {{ item.portal }}
+      loop: "{{ iscsi_targets | default([]) }}"
+      when: iscsi_targets is defined and iscsi_targets | length > 0
+      register: iscsi_discovery
+      changed_when: false
+
+    - name: "[mounts] Se connecter aux cibles iSCSI"
+      tags: [mounts]
+      ansible.builtin.command: >
+        iscsiadm -m node -T {{ item.target }} -p {{ item.portal }} --login
+      loop: "{{ iscsi_targets | default([]) }}"
+      when: iscsi_targets is defined and iscsi_targets | length > 0
+      register: iscsi_login
+      changed_when: "'already' not in iscsi_login.stderr"
+      failed_when: iscsi_login.rc != 0 and 'already' not in iscsi_login.stderr
+
+    - name: "[mounts] Créer les points de montage iSCSI"
+      tags: [mounts]
+      ansible.builtin.file:
+        path: "{{ item.mount_point }}"
+        state: directory
+        owner: "{{ media_uid }}"
+        group: "{{ media_gid }}"
+        mode: "0775"
+      loop: "{{ iscsi_targets | default([]) }}"
+      when: iscsi_targets is defined and iscsi_targets | length > 0
+
+    - name: "[mounts] Monter les volumes iSCSI"
+      tags: [mounts]
+      ansible.posix.mount:
+        path: "{{ item.mount_point }}"
+        src: "{{ item.device | default('/dev/sdb1') }}"
+        fstype: "{{ item.fs_type | default('ext4') }}"
+        opts: "{{ item.options | default('defaults,_netdev,nofail') }}"
+        state: mounted
+      loop: "{{ iscsi_targets | default([]) }}"
+      when: iscsi_targets is defined and iscsi_targets | length > 0 and item.device is defined
+
+    # =========================================================================
+    # DIRS — Création des dossiers data + config
+    # =========================================================================
+
+    - name: "[dirs] Créer la structure de données"
+      tags: [dirs]
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ media_uid }}"
+        group: "{{ media_gid }}"
+        mode: "0775"
+      loop:
+        - "{{ data_path }}/torrents/movies"
+        - "{{ data_path }}/torrents/tv"
+        - "{{ data_path }}/torrents/music"
+        - "{{ data_path }}/torrents/books"
+        - "{{ data_path }}/media/movies"
+        - "{{ data_path }}/media/tv"
+        - "{{ data_path }}/media/music"
+        - "{{ data_path }}/media/books"
+        - "{{ data_path }}/media/comics"
+        - "{{ data_path }}/media/youtube"
+        - "{{ data_path }}/media/podcasts"
+
+    - name: "[dirs] Créer les dossiers de config"
+      tags: [dirs]
+      ansible.builtin.file:
+        path: "{{ config_path }}/{{ item }}"
+        state: directory
+        owner: "{{ media_uid }}"
+        group: "{{ media_gid }}"
+        mode: "0775"
+      loop:
+        - jellyfin
+        - plex
+        - tautulli
+        - jellyseerr
+        - sonarr
+        - radarr
+        - lidarr
+        - bazarr
+        - prowlarr
+        - transmission
+        - flaresolverr
+        - navidrome
+        - airsonic
+        - airsonic/playlists
+        - calibre
+        - calibre-web
+        - komga
+        - czkawka
+        - rclone
+        - prometheus
+        - grafana
+        - portainer
+        - npm
+        - npm/letsencrypt
+
+    # =========================================================================
+    # NETWORK — Réseau Docker
+    # =========================================================================
+
+    - name: "[network] Créer le réseau Docker media-network"
+      tags: [network]
+      community.docker.docker_network:
+        name: media-network
+        driver: bridge
+        state: present
+
+    # =========================================================================
+    # CLONE — Cloner le projet
+    # =========================================================================
+
+    - name: "[project] Cloner le repo srv-media"
+      tags: [project]
+      ansible.builtin.git:
+        repo: "https://github.com/{{ lookup('env', 'GITHUB_USER') | default('YOUR_USER', true) }}/srv-media.git"
+        dest: "{{ project_path }}"
+        version: main
+      become_user: "{{ media_user }}"
+      ignore_errors: true
+
+    # =========================================================================
+    # RÉSUMÉ
+    # =========================================================================
+
+    - name: "[info] Afficher le résumé"
+      tags: [always]
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          srv-media — Préparation terminée
+          ============================================
+          Utilisateur  : {{ media_user }} ({{ media_uid }}:{{ media_gid }})
+          Timezone     : {{ timezone }}
+          Data         : {{ data_path }}
+          Config       : {{ config_path }}
+          Docker       : {{ docker_check.stdout | default('installé') }}
+          SMB mounts   : {{ smb_mounts | default([]) | length }}
+          NFS mounts   : {{ nfs_mounts | default([]) | length }}
+          iSCSI targets: {{ iscsi_targets | default([]) | length }}
+          ============================================
+          Prochaine étape : cd {{ project_path }} && ./scripts/setup.sh
+          ============================================
