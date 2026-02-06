@@ -1,0 +1,68 @@
+---
+# =============================================================================
+# srv-media — Variables Ansible
+# =============================================================================
+# Copier en vars.yml et adapter les valeurs
+# =============================================================================
+
+# --- Utilisateur media ---
+media_user: media
+media_group: media
+media_uid: 1000
+media_gid: 1000
+
+# --- Chemins ---
+data_path: /data
+config_path: /opt/srv-media/config
+project_path: /opt/srv-media
+
+# --- Timezone ---
+timezone: Europe/Paris
+
+# --- Montages réseau ---
+# Décommentez et adaptez selon vos besoins
+# Chaque montage sera ajouté à /etc/fstab
+
+# SMB/CIFS
+smb_mounts: []
+# smb_mounts:
+#   - name: nas-media
+#     source: "//192.168.1.10/media"
+#     mount_point: /data
+#     fs_type: cifs
+#     options: "username=smbuser,password=smbpass,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev"
+#
+#   - name: nas-backup
+#     source: "//192.168.1.10/backup"
+#     mount_point: /mnt/backup
+#     fs_type: cifs
+#     options: "username=smbuser,password=smbpass,uid=1000,gid=1000,iocharset=utf8,vers=3.0,nofail,_netdev"
+
+# NFS
+nfs_mounts: []
+# nfs_mounts:
+#   - name: nfs-data
+#     source: "192.168.1.10:/volume1/data"
+#     mount_point: /data
+#     fs_type: nfs
+#     options: "rw,hard,intr,rsize=8192,wsize=8192,timeo=14,nofail,_netdev"
+
+# iSCSI
+iscsi_targets: []
+# iscsi_targets:
+#   - name: iscsi-data
+#     portal: "192.168.1.10:3260"
+#     target: "iqn.2024-01.com.nas:data"
+#     mount_point: /data
+#     fs_type: ext4
+#     options: "defaults,_netdev,nofail"
+
+# --- Paquets supplémentaires ---
+extra_packages:
+  - htop
+  - iotop
+  - ncdu
+  - tree
+  - tmux
+  - vim
+  - net-tools

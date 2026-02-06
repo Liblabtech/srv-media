@@ -1,0 +1,13 @@
+---
+# =============================================================================
+# srv-media — Inventaire Ansible
+# =============================================================================
+# Copier en inventory.yml et adapter les valeurs
+# =============================================================================
+all:
+  hosts:
+    media-server:
+      ansible_host: 172.0.16.126
+      ansible_user: admin
+      ansible_become: true
+      # ansible_ssh_private_key_file: ~/.ssh/id_ed25519

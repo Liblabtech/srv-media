@@ -1,0 +1,97 @@
+# =============================================================================
+# srv-media — Admin & Infrastructure
+# =============================================================================
+# Dashboard, Portainer, Dozzle, Watchtower, Nginx Proxy Manager
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  media-network:
+    external: true
+
+services:
+  # ─── DASHBOARD ───────────────────────────────────────────────────
+  nginx-dashboard:
+    image: nginx:alpine
+    container_name: nginx-dashboard
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    ports:
+      - "${DASHBOARD_HTTP_PORT:-32768}:80"
+      - "${DASHBOARD_HTTPS_PORT:-32769}:443"
+    volumes:
+      - ./config/dashboard:/usr/share/nginx/html:ro
+      - ./config/nginx-dashboard/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - media-network
+
+  # ─── PORTAINER ───────────────────────────────────────────────────
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    ports:
+      - "${PORTAINER_HTTP_PORT:-9000}:9000"
+      - "${PORTAINER_HTTPS_PORT:-9443}:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${CONFIG_PATH}/portainer:/data
+    networks:
+      - media-network
+
+  # ─── DOZZLE (Docker Logs) ────────────────────────────────────────
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    ports:
+      - "${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - media-network
+
+  # ─── WATCHTOWER (Auto-update) ────────────────────────────────────
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      - WATCHTOWER_SCHEDULE=${WATCHTOWER_SCHEDULE:-0 0 4 * * *}
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - TZ=${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - media-network
+
+  # ─── NGINX PROXY MANAGER ────────────────────────────────────────
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    ports:
+      - "${NPM_HTTP_PORT:-80}:80"
+      - "${NPM_HTTPS_PORT:-443}:443"
+      - "${NPM_ADMIN_PORT:-81}:81"
+    volumes:
+      - ${CONFIG_PATH}/npm:/data
+      - ${CONFIG_PATH}/npm/letsencrypt:/etc/letsencrypt
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:81/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network

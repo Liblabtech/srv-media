@@ -1,0 +1,55 @@
+# =============================================================================
+# srv-media — Musique
+# =============================================================================
+# Navidrome, Airsonic
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  media-network:
+    external: true
+
+services:
+  # ─── NAVIDROME ───────────────────────────────────────────────────
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    environment:
+      ND_SCANSCHEDULE: 1h
+      ND_LOGLEVEL: info
+      ND_BASEURL: ""
+    ports:
+      - "${NAVIDROME_PORT:-4533}:4533"
+    volumes:
+      - ${CONFIG_PATH}/navidrome:/data
+      - ${DATA_PATH}/media/music:/music:ro
+    networks:
+      - media-network
+
+  # ─── AIRSONIC ADVANCED ──────────────────────────────────────────
+  airsonic:
+    image: lscr.io/linuxserver/airsonic-advanced:latest
+    container_name: airsonic
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+    ports:
+      - "${AIRSONIC_PORT:-4040}:4040"
+    volumes:
+      - ${CONFIG_PATH}/airsonic:/config
+      - ${DATA_PATH}/media/music:/music:ro
+      - ${DATA_PATH}/media/podcasts:/podcasts
+      - ${CONFIG_PATH}/airsonic/playlists:/playlists
+    networks:
+      - media-network

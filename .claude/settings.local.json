@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"g:\\\\GitHub\\\\srv-media\\\\srv-media\" log --oneline --all)"
+    ]
+  }
+}

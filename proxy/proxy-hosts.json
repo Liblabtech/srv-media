@@ -1,0 +1,117 @@
+[
+  {
+    "domain": "dashboard.media.lib-lab.cloud",
+    "forward_host": "nginx-dashboard",
+    "forward_port": 80
+  },
+  {
+    "domain": "portainer.media.lib-lab.cloud",
+    "forward_host": "portainer",
+    "forward_port": 9000
+  },
+  {
+    "domain": "dozzle.lib-lab.cloud",
+    "forward_host": "dozzle",
+    "forward_port": 8080
+  },
+  {
+    "domain": "jellyfin.lib-lab.cloud",
+    "forward_host": "jellyfin",
+    "forward_port": 8096
+  },
+  {
+    "domain": "tautulli.lib-lab.cloud",
+    "forward_host": "tautulli",
+    "forward_port": 8181
+  },
+  {
+    "domain": "jellyseerr.lib-lab.cloud",
+    "forward_host": "jellyseerr",
+    "forward_port": 5055
+  },
+  {
+    "domain": "sonarr.lib-lab.cloud",
+    "forward_host": "sonarr",
+    "forward_port": 8989
+  },
+  {
+    "domain": "radarr.lib-lab.cloud",
+    "forward_host": "radarr",
+    "forward_port": 7878
+  },
+  {
+    "domain": "lidarr.lib-lab.cloud",
+    "forward_host": "lidarr",
+    "forward_port": 8686
+  },
+  {
+    "domain": "bazarr.lib-lab.cloud",
+    "forward_host": "bazarr",
+    "forward_port": 6767
+  },
+  {
+    "domain": "prowlarr.lib-lab.cloud",
+    "forward_host": "prowlarr",
+    "forward_port": 9696
+  },
+  {
+    "domain": "transmission.lib-lab.cloud",
+    "forward_host": "transmission",
+    "forward_port": 9091
+  },
+  {
+    "domain": "flaresolverr.lib-lab.cloud",
+    "forward_host": "flaresolverr",
+    "forward_port": 8191
+  },
+  {
+    "domain": "navidrome.lib-lab.cloud",
+    "forward_host": "navidrome",
+    "forward_port": 4533
+  },
+  {
+    "domain": "airsonic.lib-lab.cloud",
+    "forward_host": "airsonic",
+    "forward_port": 4040
+  },
+  {
+    "domain": "calibre.lib-lab.cloud",
+    "forward_host": "calibre",
+    "forward_port": 8080
+  },
+  {
+    "domain": "calibre-web.lib-lab.cloud",
+    "forward_host": "calibre-web",
+    "forward_port": 8083
+  },
+  {
+    "domain": "komga.lib-lab.cloud",
+    "forward_host": "komga",
+    "forward_port": 25600
+  },
+  {
+    "domain": "czkawka.lib-lab.cloud",
+    "forward_host": "czkawka",
+    "forward_port": 5800
+  },
+  {
+    "domain": "metube.lib-lab.cloud",
+    "forward_host": "metube",
+    "forward_port": 8081
+  },
+  {
+    "domain": "rclone.lib-lab.cloud",
+    "forward_host": "rclone",
+    "forward_port": 5572
+  },
+  {
+    "domain": "prometheus.media.lib-lab.cloud",
+    "forward_host": "prometheus",
+    "forward_port": 9080
+  },
+  {
+    "domain": "grafana.media.lib-lab.cloud",
+    "forward_host": "grafana",
+    "forward_port": 3000
+  }
+]

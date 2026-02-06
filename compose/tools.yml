@@ -1,0 +1,65 @@
+# =============================================================================
+# srv-media — Outils
+# =============================================================================
+# Czkawka, MeTube, Rclone
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  media-network:
+    external: true
+
+services:
+  # ─── CZKAWKA (Duplicate Finder) ─────────────────────────────────
+  czkawka:
+    image: jlesage/czkawka:latest
+    container_name: czkawka
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      USER_ID: ${PUID}
+      GROUP_ID: ${PGID}
+      TZ: ${TZ}
+    ports:
+      - "${CZKAWKA_PORT:-5800}:5800"
+    volumes:
+      - ${CONFIG_PATH}/czkawka:/config
+      - ${DATA_PATH}:/data
+    networks:
+      - media-network
+
+  # ─── METUBE (YouTube Downloader) ────────────────────────────────
+  metube:
+    image: ghcr.io/alexta69/metube:latest
+    container_name: metube
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      UID: ${PUID}
+      GID: ${PGID}
+    ports:
+      - "${METUBE_PORT:-8081}:8081"
+    volumes:
+      - ${DATA_PATH}/media/youtube:/downloads
+    networks:
+      - media-network
+
+  # ─── RCLONE (Cloud Sync WebGUI) ─────────────────────────────────
+  rclone:
+    image: rclone/rclone:latest
+    container_name: rclone
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    command: rcd --rc-web-gui --rc-addr=:5572 --rc-web-gui-no-open-browser --rc-no-auth
+    ports:
+      - "${RCLONE_PORT:-5572}:5572"
+    volumes:
+      - ${CONFIG_PATH}/rclone:/config/rclone
+      - ${DATA_PATH}:/data
+    networks:
+      - media-network

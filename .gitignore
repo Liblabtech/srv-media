@@ -1,0 +1,26 @@
+# Environment (contient secrets/tokens)
+.env
+
+# Config containers (générés au runtime)
+config/
+!config/.gitkeep
+
+# Données NPM runtime
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Backups générés par backup.sh
+*.tar.gz

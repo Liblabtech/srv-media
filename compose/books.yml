@@ -1,0 +1,72 @@
+# =============================================================================
+# srv-media — Livres & BD
+# =============================================================================
+# Calibre, Calibre-Web, Komga
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+
+networks:
+  media-network:
+    external: true
+
+services:
+  # ─── CALIBRE (Desktop GUI via Web) ──────────────────────────────
+  calibre:
+    image: lscr.io/linuxserver/calibre:latest
+    container_name: calibre
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${CALIBRE_PORT:-8083}:8080"
+      - "8182:8181"
+    volumes:
+      - ${CONFIG_PATH}/calibre:/config
+      - ${DATA_PATH}/media/books:/books
+    networks:
+      - media-network
+
+  # ─── CALIBRE-WEB ────────────────────────────────────────────────
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web:latest
+    container_name: calibre-web
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      DOCKER_MODS: linuxserver/mods:universal-calibre
+    ports:
+      - "${CALIBRE_WEB_PORT:-8084}:8083"
+    volumes:
+      - ${CONFIG_PATH}/calibre-web:/config
+      - ${DATA_PATH}/media/books:/books:ro
+    depends_on:
+      - calibre
+    networks:
+      - media-network
+
+  # ─── KOMGA (Comics/Manga) ───────────────────────────────────────
+  komga:
+    image: gotson/komga:latest
+    container_name: komga
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    ports:
+      - "${KOMGA_PORT:-25600}:25600"
+    volumes:
+      - ${CONFIG_PATH}/komga:/config
+      - ${DATA_PATH}/media/comics:/data
+    networks:
+      - media-network

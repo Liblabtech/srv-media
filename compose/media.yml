@@ -1,0 +1,117 @@
+# =============================================================================
+# srv-media — Media Servers
+# =============================================================================
+# Jellyfin, Plex, Tautulli, Jellyseerr
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+
+networks:
+  media-network:
+    external: true
+
+services:
+  # ─── JELLYFIN ────────────────────────────────────────────────────
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      JELLYFIN_PublishedServerUrl: ${JELLYFIN_PUBLISHED_SERVER_URL:-}
+    ports:
+      - "${JELLYFIN_PORT:-8096}:8096"
+      - "${JELLYFIN_HTTPS_PORT:-8920}:8920"
+      - "7359:7359/udp"
+    volumes:
+      - ${CONFIG_PATH}/jellyfin:/config
+      - ${DATA_PATH}:/data
+    devices:
+      - /dev/dri:/dev/dri
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── PLEX ────────────────────────────────────────────────────────
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      VERSION: docker
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+      ADVERTISE_IP: ${PLEX_ADVERTISE_IP:-}
+    ports:
+      - "${PLEX_PORT:-32400}:32400"
+    volumes:
+      - ${CONFIG_PATH}/plex:/config
+      - ${DATA_PATH}:/data
+    devices:
+      - /dev/dri:/dev/dri
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── TAUTULLI (Plex Monitoring) ──────────────────────────────────
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: tautulli
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${TAUTULLI_PORT:-8181}:8181"
+    volumes:
+      - ${CONFIG_PATH}/tautulli:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── JELLYSEERR (Requests) ──────────────────────────────────────
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      TZ: ${TZ}
+    ports:
+      - "${JELLYSEERR_PORT:-5055}:5055"
+    volumes:
+      - ${CONFIG_PATH}/jellyseerr:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5055/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
