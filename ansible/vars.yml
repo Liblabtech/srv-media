@@ -1,0 +1,57 @@
+---
+# Généré par prepare.sh le 2026-02-06 21:02:21
+
+media_user: root
+media_group: root
+media_uid: 0
+media_gid: 0
+
+data_path: /mnt/data-iscsi
+config_path: /opt/srv-media
+project_path: /opt/srv-media
+
+timezone: Europe/Paris
+vars:  
+    system_packages:
+    - htop
+    - iotop
+    - ncdu
+    - tree
+    - tmux
+    - vim
+    - net-tools
+
+tasks:
+  - name: "[system] Installation des paquets requis"
+    ansible.builtin.apt:
+      name: "{{ system_packages }}"
+      state: present
+      update_cache: true
+      
+extra_packages:
+  - htop
+  - iotop
+  - ncdu
+  - tree
+  - tmux
+  - vim
+  - net-tools
+  - htop
+  - iotop
+  - ncdu
+  - tree
+  - tmux
+  - vim
+  - net-tools
+smb_mounts: []
+
+nfs_mounts: []
+
+iscsi_targets:
+    - name: mnt-data-iscsi
+      portal: "172.0.16.151:3260"
+      target: "iqn.2004-04.com.qnap:ts-219pii:iscsi.media.000509"
+      device: "/dev/sdb1"
+      mount_point: /mnt/data-iscsi
+      fs_type: ext4
+      options: "defaults,_netdev,nofail"

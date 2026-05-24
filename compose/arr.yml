@@ -1,7 +1,7 @@
 # =============================================================================
 # srv-media — Arr Stack & Download
 # =============================================================================
-# Sonarr, Radarr, Lidarr, Bazarr, Prowlarr, Transmission, FlareSolverr
+# Sonarr, Radarr, Lidarr, Bazarr, Prowlarr, Transmission, FlareSolverr, Notifiarr
 # =============================================================================
 
 x-logging: &default-logging
@@ -171,6 +171,28 @@ services:
       - "${FLARESOLVERR_PORT:-8191}:8191"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── NOTIFIARR (Notifications) ─────────────────────────────────
+  notifiarr:
+    image: golift/notifiarr:latest
+    container_name: notifiarr
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      DN_API_KEY: ${NOTIFIARR_API_KEY:-}
+    ports:
+      - "${NOTIFIARR_PORT:-5454}:5454"
+    volumes:
+      - ${CONFIG_PATH}/notifiarr:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5454/"]
       interval: 30s
       timeout: 10s
       retries: 3

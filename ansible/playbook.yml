@@ -44,6 +44,13 @@
       tags: [system]
       ansible.builtin.apt:
         name:
+          - htop
+          - iotop
+          - ncdu
+          - tree
+          - tmux
+          - vim
+          - net-tools
           - apt-transport-https
           - ca-certificates
           - curl
@@ -59,7 +66,6 @@
           - parted
           - "{{ extra_packages | default([]) }}"
         state: present
-        flat: false
       ignore_errors: true
 
     - name: "[system] Installation des paquets supplémentaires"
@@ -164,7 +170,7 @@
         name: "{{ ansible_user }}"
         groups: docker
         append: true
-      when: ansible_user != media_user
+      when: ansible_user_id != media_user
 
     # =========================================================================
     # MOUNTS — Montages SMB/CIFS

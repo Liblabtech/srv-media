@@ -23,6 +23,7 @@ services:
     logging: *default-logging
     user: "${PUID}:${PGID}"
     environment:
+      ND_PLUGINS_ENABLED: "true"
       ND_SCANSCHEDULE: 1h
       ND_LOGLEVEL: info
       ND_BASEURL: ""
@@ -30,7 +31,7 @@ services:
       - "${NAVIDROME_PORT:-4533}:4533"
     volumes:
       - ${CONFIG_PATH}/navidrome:/data
-      - ${DATA_PATH}/media/music:/music:ro
+      - ${DATA_PATH}/:/music:ro
     networks:
       - media-network
 
@@ -48,8 +49,29 @@ services:
       - "${AIRSONIC_PORT:-4040}:4040"
     volumes:
       - ${CONFIG_PATH}/airsonic:/config
-      - ${DATA_PATH}/media/music:/music:ro
-      - ${DATA_PATH}/media/podcasts:/podcasts
+      - ${DATA_PATH}/music:/music:ro
+      - ${DATA_PATH}/podcasts:/podcasts
       - ${CONFIG_PATH}/airsonic/playlists:/playlists
+    networks:
+      - media-network
+
+  # ─── SUBSONIC ───────────────────────────────────────────────
+  subsonic:
+    image: stuckj/subsonic:latest
+    container_name: subsonic
+    restart: ${RESTART_POLICY:-unless-stopped}
+    logging: *default-logging
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      SUBSONIC_PORT: "8085"
+    ports:
+      - "${SUBSONIC_PORT:-8085}:8085"
+    volumes:
+      - ${CONFIG_PATH}/subsonic:/config
+      - ${DATA_PATH}/music:/music:ro
+      - ${DATA_PATH}/podcasts:/podcasts
+      - ${CONFIG_PATH}/subsonic/playlists:/playlists
     networks:
       - media-network

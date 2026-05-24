@@ -1,0 +1,6 @@
+---
+all:
+  hosts:
+    media-server:
+      ansible_connection: local
+      ansible_become: true

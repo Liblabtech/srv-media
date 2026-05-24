@@ -42,10 +42,11 @@ services:
     environment:
       UID: ${PUID}
       GID: ${PGID}
+      TZ: ${TZ}
     ports:
       - "${METUBE_PORT:-8081}:8081"
     volumes:
-      - ${DATA_PATH}/media/youtube:/downloads
+      - ${DATA_PATH}/music/youtube:/downloads
     networks:
       - media-network
 

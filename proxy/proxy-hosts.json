@@ -1,5 +1,11 @@
 [
   {
+    "domain": "cockpit.media.lib-lab.cloud",
+    "forward_host": "cockpit-dashboard",
+    "forward_port": 9090
+  },
+  
+  {
     "domain": "dashboard.media.lib-lab.cloud",
     "forward_host": "nginx-dashboard",
     "forward_port": 80
@@ -12,7 +18,7 @@
   {
     "domain": "dozzle.lib-lab.cloud",
     "forward_host": "dozzle",
-    "forward_port": 8080
+    "forward_port": 9999
   },
   {
     "domain": "jellyfin.lib-lab.cloud",

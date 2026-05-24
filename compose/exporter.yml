@@ -1,0 +1,28 @@
+---
+networks:
+  media-network:
+    external: true
+services:
+  jellyfin_exporter-2:
+    image: drkhsh/jellyfin-exporter:latest
+    container_name: jellyfin_exporter-2
+    ports:
+      - 9027:9027
+    environment:
+      - JELLYFIN_BASEURL=http://172.0.16.126:8096
+      - JELLYFIN_APIKEY=f82a7aad479842ebb24bf595616a9131
+    restart: unless-stopped
+    networks:
+      - media-network
+  jellyfin_exporter:
+    image: rebelcore/jellyfin-exporter:latest
+    container_name: jellyfin_exporter
+    command:
+      - '--jellyfin.address=http://172.0.16.126:8096'
+      - '--jellyfin.token=f82a7aad479842ebb24bf595616a9131'
+      - '--collector.activity'
+    ports:
+      - 9594:9594
+    restart: unless-stopped
+    networks:
+      - media-network

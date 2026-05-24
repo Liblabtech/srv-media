@@ -1,0 +1,813 @@
+# =============================================================================
+# srv-media — All-in-One Compose
+# =============================================================================
+# Consolidation de tous les stacks de la VM srv-media (172.0.16.126)
+#
+# Sections :
+#   1. Streaming vidéo   — Jellyfin, Plex, Tautulli, Jellyseerr
+#   2. Arr & Download    — Sonarr, Radarr, Lidarr, Bazarr, Prowlarr,
+#                          Transmission, FlareSolverr, Notifiarr
+#   3. Musique           — Navidrome, Airsonic, Subsonic
+#   4. Livres & BD       — Calibre, Calibre-Web, Komga
+#   5. Photos            — Immich (server, ML, Redis, PostgreSQL)
+#   6. Monitoring        — Prometheus, Grafana, Loki, cAdvisor, Blackbox
+#   7. Administration    — nginx-dashboard, Portainer, Dockhand, Dozzle, Watchtower
+#   8. Outils            — Czkawka, MeTube, Rclone
+#   9. Fichiers          — Filebrowser
+#  10. Diagrammes        — Fossflow
+#  11. Exporters         — jellyfin_exporter ×2
+#
+# Usage :
+#   docker network create media-network   # une seule fois
+#   docker compose -f all-in-one.yml up -d
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+
+x-restart: &default-restart
+  restart: ${RESTART_POLICY:-unless-stopped}
+
+networks:
+  media-network:
+    external: true
+
+volumes:
+  model-cache:
+  dockhand_data:
+
+services:
+
+# =============================================================================
+# 1. STREAMING VIDÉO
+# =============================================================================
+
+  # ─── JELLYFIN ─────────────────────────────────────────────────────────────
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      JELLYFIN_PublishedServerUrl: ${JELLYFIN_PUBLISHED_SERVER_URL:-}
+    ports:
+      - "${JELLYFIN_PORT:-8096}:8096"
+      - "${JELLYFIN_HTTPS_PORT:-8920}:8920"
+      - "7359:7359/udp"
+    volumes:
+      - ${CONFIG_PATH}/jellyfin:/config
+      - /mnt/data-iscsi/:/data
+    devices:
+      - /dev/dri:/dev/dri
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── PLEX ─────────────────────────────────────────────────────────────────
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      VERSION: docker
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+      ADVERTISE_IP: ${PLEX_ADVERTISE_IP:-}
+    ports:
+      - "${PLEX_PORT:-32400}:32400"
+    volumes:
+      - ${CONFIG_PATH}/plex:/config
+      - ${DATA_PATH}:/data
+    devices:
+      - /dev/dri:/dev/dri
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:32400/identity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── TAUTULLI ─────────────────────────────────────────────────────────────
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: tautulli
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${TAUTULLI_PORT:-8181}:8181"
+    volumes:
+      - ${CONFIG_PATH}/tautulli:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── JELLYSEERR ───────────────────────────────────────────────────────────
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      TZ: ${TZ}
+    ports:
+      - "${JELLYSEERR_PORT:-5055}:5055"
+    volumes:
+      - ${CONFIG_PATH}/jellyseerr:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5055/api/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+# =============================================================================
+# 2. ARR STACK & TÉLÉCHARGEMENT
+# =============================================================================
+
+  # ─── SONARR ───────────────────────────────────────────────────────────────
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${SONARR_PORT:-8989}:8989"
+    volumes:
+      - ${CONFIG_PATH}/sonarr:/config
+      - ${DATA_PATH}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── RADARR ───────────────────────────────────────────────────────────────
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${RADARR_PORT:-7878}:7878"
+    volumes:
+      - ${CONFIG_PATH}/radarr:/config
+      - ${DATA_PATH}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── LIDARR ───────────────────────────────────────────────────────────────
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${LIDARR_PORT:-8686}:8686"
+    volumes:
+      - ${CONFIG_PATH}/lidarr:/config
+      - ${DATA_PATH}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8686/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── BAZARR ───────────────────────────────────────────────────────────────
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${BAZARR_PORT:-6767}:6767"
+    volumes:
+      - ${CONFIG_PATH}/bazarr:/config
+      - ${DATA_PATH}:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6767/api/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── PROWLARR ─────────────────────────────────────────────────────────────
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${PROWLARR_PORT:-9696}:9696"
+    volumes:
+      - ${CONFIG_PATH}/prowlarr:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── TRANSMISSION ─────────────────────────────────────────────────────────
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      USER: ${TRANSMISSION_USER:-}
+      PASS: ${TRANSMISSION_PASS:-}
+      PEERPORT: ${TRANSMISSION_PEER_PORT:-51413}
+    ports:
+      - "${TRANSMISSION_PORT:-9091}:9091"
+      - "${TRANSMISSION_PEER_PORT:-51413}:51413"
+      - "${TRANSMISSION_PEER_PORT:-51413}:51413/udp"
+    volumes:
+      - ${CONFIG_PATH}/transmission:/config
+      - ${DATA_PATH}/torrents:/data/torrents
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/transmission/web/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── FLARESOLVERR ─────────────────────────────────────────────────────────
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      LOG_LEVEL: info
+      LOG_HTML: "false"
+      CAPTCHA_SOLVER: none
+      TZ: ${TZ}
+    ports:
+      - "${FLARESOLVERR_PORT:-8191}:8191"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+  # ─── NOTIFIARR ────────────────────────────────────────────────────────────
+  notifiarr:
+    image: golift/notifiarr:latest
+    container_name: notifiarr
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      DN_API_KEY: ${NOTIFIARR_API_KEY:-}
+    ports:
+      - "${NOTIFIARR_PORT:-5454}:5454"
+    volumes:
+      - ${CONFIG_PATH}/notifiarr:/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5454/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - media-network
+
+# =============================================================================
+# 3. MUSIQUE
+# =============================================================================
+
+  # ─── NAVIDROME ────────────────────────────────────────────────────────────
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    <<: *default-restart
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    environment:
+      ND_PLUGINS_ENABLED: "true"
+      ND_SCANSCHEDULE: 1h
+      ND_LOGLEVEL: info
+      ND_BASEURL: ""
+    ports:
+      - "${NAVIDROME_PORT:-4533}:4533"
+    volumes:
+      - ${CONFIG_PATH}/navidrome:/data
+      - ${DATA_PATH}/:/music:ro
+    networks:
+      - media-network
+
+  # ─── AIRSONIC ─────────────────────────────────────────────────────────────
+  airsonic:
+    image: lscr.io/linuxserver/airsonic-advanced:latest
+    container_name: airsonic
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${AIRSONIC_PORT:-4040}:4040"
+    volumes:
+      - ${CONFIG_PATH}/airsonic:/config
+      - ${DATA_PATH}/music:/music:ro
+      - ${DATA_PATH}/podcasts:/podcasts
+      - ${CONFIG_PATH}/airsonic/playlists:/playlists
+    networks:
+      - media-network
+
+  # ─── SUBSONIC ─────────────────────────────────────────────────────────────
+  subsonic:
+    image: stuckj/subsonic:latest
+    container_name: subsonic
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      SUBSONIC_PORT: "8085"
+    ports:
+      - "${SUBSONIC_PORT:-8085}:8085"
+    volumes:
+      - ${CONFIG_PATH}/subsonic:/config
+      - ${DATA_PATH}/music:/music:ro
+      - ${DATA_PATH}/podcasts:/podcasts
+      - ${CONFIG_PATH}/subsonic/playlists:/playlists
+    networks:
+      - media-network
+
+# =============================================================================
+# 4. LIVRES & BD
+# =============================================================================
+
+  # ─── CALIBRE ──────────────────────────────────────────────────────────────
+  calibre:
+    image: lscr.io/linuxserver/calibre:latest
+    container_name: calibre
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+    ports:
+      - "${CALIBRE_PORT:-8083}:8080"
+      - "8182:8181"
+    volumes:
+      - ${CONFIG_PATH}/calibre:/config
+      - ${DATA_PATH}/media/books:/books
+    networks:
+      - media-network
+
+  # ─── CALIBRE-WEB ──────────────────────────────────────────────────────────
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web:latest
+    container_name: calibre-web
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      <<: *common-env
+      DOCKER_MODS: linuxserver/mods:universal-calibre
+    ports:
+      - "${CALIBRE_WEB_PORT:-8084}:8083"
+    volumes:
+      - ${CONFIG_PATH}/calibre-web:/config
+      - ${DATA_PATH}/media/books:/books:ro
+    depends_on:
+      - calibre
+    networks:
+      - media-network
+
+  # ─── KOMGA ────────────────────────────────────────────────────────────────
+  komga:
+    image: gotson/komga:latest
+    container_name: komga
+    <<: *default-restart
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    ports:
+      - "${KOMGA_PORT:-25600}:25600"
+    volumes:
+      - ${CONFIG_PATH}/komga:/config
+      - ${DATA_PATH}/media/comics:/data
+    networks:
+      - media-network
+
+# =============================================================================
+# 5. PHOTOS — IMMICH
+# =============================================================================
+
+  # ─── IMMICH SERVER ────────────────────────────────────────────────────────
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    container_name: immich_server
+    <<: *default-restart
+    volumes:
+      - ${DATA_PATH}:/data
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - "2283:2283"
+    depends_on:
+      - immich-redis
+      - immich-database
+    healthcheck:
+      disable: false
+    networks:
+      - media-network
+
+  # ─── IMMICH MACHINE LEARNING ──────────────────────────────────────────────
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    container_name: immich_machine_learning
+    <<: *default-restart
+    volumes:
+      - model-cache:/cache
+    env_file:
+      - .env
+    healthcheck:
+      disable: false
+    networks:
+      - media-network
+
+  # ─── IMMICH REDIS ─────────────────────────────────────────────────────────
+  immich-redis:
+    image: docker.io/valkey/valkey:9@sha256:546304417feac0874c3dd576e0952c6bb8f06bb4093ea0c9ca303c73cf458f63
+    container_name: immich_redis
+    <<: *default-restart
+    healthcheck:
+      test: redis-cli ping || exit 1
+    networks:
+      - media-network
+
+  # ─── IMMICH POSTGRESQL ────────────────────────────────────────────────────
+  immich-database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    container_name: immich_postgres
+    <<: *default-restart
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    shm_size: 128mb
+    healthcheck:
+      disable: false
+    networks:
+      - media-network
+
+# =============================================================================
+# 6. MONITORING
+# =============================================================================
+
+  # ─── PROMETHEUS ───────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    <<: *default-restart
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.listen-address=:9080"
+    ports:
+      - "${PROMETHEUS_PORT:-9080}:9080"
+    volumes:
+      - ${CONFIG_PATH}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${CONFIG_PATH}/prometheus:/prometheus
+    networks:
+      - media-network
+
+  # ─── GRAFANA ──────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    <<: *default-restart
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PATHS_CONFIG: /etc/grafana/grafana.ini
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_SERVER_DOMAIN: grafana.media.lib-lab.cloud
+      GF_SERVER_ROOT_URL: https://grafana.media.lib-lab.cloud/
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ${CONFIG_PATH}/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ${CONFIG_PATH}/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${CONFIG_PATH}/grafana/data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - media-network
+
+  # ─── LOKI ─────────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    <<: *default-restart
+    logging: *default-logging
+    user: "${PUID}:${PGID}"
+    command:
+      - "-config.file=/etc/loki/local-config.yaml"
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ${CONFIG_PATH}/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+      - ${CONFIG_PATH}/loki/data:/loki
+    networks:
+      - media-network
+
+  # ─── CADVISOR ─────────────────────────────────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    <<: *default-restart
+    privileged: true
+    ports:
+      - "8088:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - media-network
+
+  # ─── BLACKBOX EXPORTER ────────────────────────────────────────────────────
+  blackbox-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: blackbox-exporter
+    <<: *default-restart
+    logging: *default-logging
+    command:
+      - "--config.file=/config/blackbox.yml"
+    ports:
+      - "${BLACKBOX_PORT:-9115}:9115"
+    volumes:
+      - ${CONFIG_PATH}/blackbox/blackbox.yml:/config/blackbox.yml:ro
+    networks:
+      - media-network
+
+  # ─── JELLYFIN EXPORTER (rebelcore) ───────────────────────────────────────
+  jellyfin-exporter:
+    image: rebelcore/jellyfin-exporter:latest
+    container_name: jellyfin_exporter
+    <<: *default-restart
+    command:
+      - '--jellyfin.address=http://172.0.16.126:8096'
+      - '--jellyfin.token=${JELLYFIN_API_KEY:-}'
+      - '--collector.activity'
+    ports:
+      - "9594:9594"
+    networks:
+      - media-network
+
+  # ─── JELLYFIN EXPORTER 2 (drkhsh) ────────────────────────────────────────
+  jellyfin-exporter-2:
+    image: drkhsh/jellyfin-exporter:latest
+    container_name: jellyfin_exporter-2
+    <<: *default-restart
+    environment:
+      - JELLYFIN_BASEURL=http://172.0.16.126:8096
+      - JELLYFIN_APIKEY=${JELLYFIN_API_KEY:-}
+    ports:
+      - "9027:9027"
+    networks:
+      - media-network
+
+# =============================================================================
+# 7. ADMINISTRATION
+# =============================================================================
+
+  # ─── NGINX DASHBOARD ──────────────────────────────────────────────────────
+  nginx-dashboard:
+    image: nginx:alpine
+    container_name: nginx-dashboard
+    <<: *default-restart
+    logging: *default-logging
+    ports:
+      - "${DASHBOARD_HTTP_PORT:-32768}:80"
+      - "${DASHBOARD_HTTPS_PORT:-32769}:443"
+    volumes:
+      - ./config/dashboard:/usr/share/nginx/html:ro
+      - ./config/nginx-dashboard/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - media-network
+
+  # ─── PORTAINER ────────────────────────────────────────────────────────────
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    <<: *default-restart
+    logging: *default-logging
+    ports:
+      - "${PORTAINER_HTTP_PORT:-9000}:9000"
+      - "${PORTAINER_HTTPS_PORT:-9443}:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${CONFIG_PATH}/portainer:/data
+    networks:
+      - media-network
+
+  # ─── DOCKHAND ─────────────────────────────────────────────────────────────
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    <<: *default-restart
+    ports:
+      - "${DOCKHAND_PORT:-3006}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+    networks:
+      - media-network
+
+  # ─── DOZZLE ───────────────────────────────────────────────────────────────
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      - DOZZLE_LEVEL=info
+      - DOZZLE_TAIL_SIZE=1000
+      - DOZZLE_MODE=server
+      - DOZZLE_REMOTE_AGENT=${DOZZLE_REMOTE_AGENT:-}
+    ports:
+      - "${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - media-network
+
+  # ─── WATCHTOWER ───────────────────────────────────────────────────────────
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      - WATCHTOWER_SCHEDULE=${WATCHTOWER_SCHEDULE:-0 0 4 * * *}
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=false
+      - TZ=${TZ}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - media-network
+
+# =============================================================================
+# 8. OUTILS
+# =============================================================================
+
+  # ─── CZKAWKA ──────────────────────────────────────────────────────────────
+  czkawka:
+    image: jlesage/czkawka:latest
+    container_name: czkawka
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      USER_ID: ${PUID}
+      GROUP_ID: ${PGID}
+      TZ: ${TZ}
+    ports:
+      - "${CZKAWKA_PORT:-5800}:5800"
+    volumes:
+      - ${CONFIG_PATH}/czkawka:/config
+      - ${DATA_PATH}:/data
+    networks:
+      - media-network
+
+  # ─── METUBE ───────────────────────────────────────────────────────────────
+  metube:
+    image: ghcr.io/alexta69/metube:latest
+    container_name: metube
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      UID: ${PUID}
+      GID: ${PGID}
+      TZ: ${TZ}
+    ports:
+      - "${METUBE_PORT:-8081}:8081"
+    volumes:
+      - ${DATA_PATH}/music/youtube:/downloads
+    networks:
+      - media-network
+
+  # ─── RCLONE ───────────────────────────────────────────────────────────────
+  rclone:
+    image: rclone/rclone:latest
+    container_name: rclone
+    <<: *default-restart
+    logging: *default-logging
+    command: rcd --rc-web-gui --rc-addr=:5572 --rc-web-gui-no-open-browser --rc-no-auth
+    ports:
+      - "${RCLONE_PORT:-5572}:5572"
+    volumes:
+      - ${CONFIG_PATH}/rclone:/config/rclone
+      - ${DATA_PATH}:/data
+    networks:
+      - media-network
+
+# =============================================================================
+# 9. FICHIERS
+# =============================================================================
+
+  # ─── FILEBROWSER ──────────────────────────────────────────────────────────
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    <<: *default-restart
+    user: "0:0"
+    ports:
+      - "${FILEBROWSER_PORT:-8090}:80"
+    volumes:
+      - ${CONFIG_PATH}/filebrowser:/config
+      - /mnt/data-iscsi/data-pc:/srv
+    networks:
+      - media-network
+
+# =============================================================================
+# 10. DIAGRAMMES
+# =============================================================================
+
+  # ─── FOSSFLOW ─────────────────────────────────────────────────────────────
+  fossflow:
+    image: stnsmith/fossflow:latest
+    container_name: fossflow
+    <<: *default-restart
+    pull_policy: always
+    ports:
+      - "8092:80"
+    environment:
+      - NODE_ENV=production
+      - ENABLE_SERVER_STORAGE=${ENABLE_SERVER_STORAGE:-true}
+      - STORAGE_PATH=/data/diagrams
+      - ENABLE_GIT_BACKUP=${ENABLE_GIT_BACKUP:-false}
+    volumes:
+      - ./diagrams:/data/diagrams
+    networks:
+      - media-network

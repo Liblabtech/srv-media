@@ -1,0 +1,17 @@
+### --- File: file.yml ---
+# This is a sample YAML file for configuration purposes.
+# You can modify the values as needed.
+# filebrowser:
+#   port: 8080
+services:
+  # ─── Filebrowser ───────────────────────────────────────────────────
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: ${RESTART_POLICY:-unless-stopped}
+    user: "0:0"
+    ports:
+      - "${FILEBROWSER_PORT:-8090}:80"
+    volumes:
+      - ${CONFIG_PATH}/filebrowser:/config
+      - /mnt/data-iscsi/data-pc:/srv
